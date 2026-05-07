@@ -1255,7 +1255,6 @@ elif PAGE == "clustering":
         for b,v in zip(bars2,dbs): ax2.text(b.get_x()+b.get_width()/2, b.get_height()+0.005, f"{v:.3f}", ha="center", va="bottom", fontsize=8, fontweight="bold", color="#1e1b3a")
         _style_ax(ax2, "Davies-Bouldin ↓ (plus bas = meilleur)", "", "Score")
         plt.tight_layout(); st.pyplot(fig); plt.close(fig)
-
 # ══════════════════════════════════════════════════════════════════════════════
 #  PAGE 3 — CLASSIFICATION
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1277,82 +1276,161 @@ elif PAGE == "classification":
     # ── Config ─────────────────────────────────────────────────────────────────
     section("Configuration")
     cfg1, cfg2, cfg3 = st.columns(3)
-    with cfg1: target_col = st.selectbox("Variable cible (y)", all_cols, index=len(all_cols)-1, key="cls_tgt")
+
+    with cfg1:
+        target_col = st.selectbox(
+            "Variable cible (y)",
+            all_cols,
+            index=len(all_cols)-1,
+            key="cls_tgt"
+        )
+
     with cfg2:
         feat_cands = [c for c in num_cols if c != target_col]
-        feat_cols = st.multiselect("Features (X)", feat_cands, default=feat_cands[:min(len(feat_cands),10)], key="cls_feats")
+        feat_cols = st.multiselect(
+            "Features (X)",
+            feat_cands,
+            default=feat_cands[:min(len(feat_cands),10)],
+            key="cls_feats"
+        )
+
     with cfg3:
-        n_folds = st.slider("Nombre de folds (K-Fold)", 2, 10, 5, key="cls_folds")
+        n_folds = st.slider(
+            "Nombre de folds (K-Fold)",
+            2, 10, 5,
+            key="cls_folds"
+        )
 
-    if not feat_cols: alert("⚠️ Sélectionnez au moins une feature", "warn"); st.stop()
+    if not feat_cols:
+        alert("⚠️ Sélectionnez au moins une feature", "warn")
+        st.stop()
 
-    # Detect task type
+    # ── Detect task type ──────────────────────────────────────────────────────
     df_cls = df[feat_cols + [target_col]].dropna()
+
     y_unique = df_cls[target_col].nunique()
     is_binary = y_unique == 2
-    task_lbl = "Classification Binaire" if is_binary else f"Classification Multi-classes ({y_unique} classes)"
-    badge_cls = "dn-green" if is_binary else "dn-blue"
-    alert(f"📌 Tâche détectée : <b>{task_lbl}</b> — {len(df_cls)} exemples", "info")
+
+    task_lbl = (
+        "Classification Binaire"
+        if is_binary
+        else f"Classification Multi-classes ({y_unique} classes)"
+    )
+
+    alert(
+        f"📌 Tâche détectée : <b>{task_lbl}</b> — {len(df_cls)} exemples",
+        "info"
+    )
 
     n_total = len(df_cls)
-    m1,m2,m3 = st.columns(3)
+
+    m1, m2, m3 = st.columns(3)
     m1.metric("Total exemples", n_total)
     m2.metric("K folds", n_folds)
     m3.metric("Taille fold test ~", f"{n_total//n_folds}")
 
-    # ── Modèles disponibles ────────────────────────────────────────────────────
+    # ── Models ────────────────────────────────────────────────────────────────
     section("Sélection des Modèles")
 
     MODEL_LIST = [
-        ("Decision Tree",     "dt",       "🌳"),
-        ("Random Forest",     "rf",       "🌲"),
-        ("SVM (RBF)",         "svm",      "🔵"),
-        ("K-Nearest Neighbors","knn",     "🔍"),
-        ("Naive Bayes",       "nb",       "📐"),
+        ("Decision Tree", "dt", "🌳"),
+        ("Random Forest", "rf", "🌲"),
+        ("SVM (RBF)", "svm", "🔵"),
+        ("K-Nearest Neighbors", "knn", "🔍"),
+        ("Naive Bayes", "nb", "📐"),
     ]
+
     if is_binary:
-        MODEL_LIST.insert(0, ("Logistic Regression","lr","📈"))
+        MODEL_LIST.insert(0, ("Logistic Regression", "lr", "📈"))
 
     BOOST_LIST = [
-        ("XGBoost",  "xgb",  "⚡"),
+        ("XGBoost", "xgb", "⚡"),
         ("LightGBM", "lgbm", "💡"),
-        ("CatBoost", "cat",  "🐱"),
+        ("CatBoost", "cat", "🐱"),
     ]
 
     st.markdown("**Modèles classiques**")
+
     mcols = st.columns(len(MODEL_LIST))
     selected_models = []
+
     for (nm, key, ico), col in zip(MODEL_LIST, mcols):
         with col:
-            if st.checkbox(f"{ico} {nm}", key=f"chk_{key}", value=(key in ["dt","rf","svm"])):
+            if st.checkbox(
+                f"{ico} {nm}",
+                key=f"chk_{key}",
+                value=(key in ["dt","rf","svm"])
+            ):
                 selected_models.append((nm, key))
 
     st.markdown("**Boosting**")
+
     bcols = st.columns(len(BOOST_LIST))
+
     for (nm, key, ico), col in zip(BOOST_LIST, bcols):
         with col:
             if st.checkbox(f"{ico} {nm}", key=f"chk_{key}"):
                 selected_models.append((nm, key))
 
-    # ── Hyperparams ────────────────────────────────────────────────────────────
+    # ── Hyperparameters ───────────────────────────────────────────────────────
     with st.expander("⚙️ Hyperparamètres"):
-        hp1,hp2,hp3,hp4,hp5 = st.columns(5)
-        with hp1: dt_depth = st.slider("DT max_depth", 1, 30, 6, key="hp_dt")
-        with hp2: rf_trees = st.slider("RF estimateurs", 10, 300, 100, 10, key="hp_rf")
-        with hp3: knn_k   = st.slider("KNN k", 1, 30, 5, key="hp_knn")
-        with hp4: svm_c   = st.number_input("SVM C", 0.01, 100.0, 1.0, key="hp_svc")
-        with hp5: xgb_lr  = st.number_input("XGB/LGBM lr", 0.001, 1.0, 0.1, key="hp_xgb")
 
-    # ── Train & Evaluate ────────────────────────────────────────────────────────
+        hp1, hp2, hp3, hp4, hp5 = st.columns(5)
+
+        with hp1:
+            dt_depth = st.slider(
+                "DT max_depth",
+                1, 30, 6,
+                key="hp_dt"
+            )
+
+        with hp2:
+            rf_trees = st.slider(
+                "RF estimateurs",
+                10, 300, 100, 10,
+                key="hp_rf"
+            )
+
+        with hp3:
+            knn_k = st.slider(
+                "KNN k",
+                1, 30, 5,
+                key="hp_knn"
+            )
+
+        with hp4:
+            svm_c = st.number_input(
+                "SVM C",
+                0.01, 100.0, 1.0,
+                key="hp_svc"
+            )
+
+        with hp5:
+            xgb_lr = st.number_input(
+                "XGB/LGBM lr",
+                0.001, 1.0, 0.1,
+                key="hp_xgb"
+            )
+
+    # ── Training ──────────────────────────────────────────────────────────────
     if not selected_models:
-        alert("Sélectionnez au moins un modèle", "warn"); st.stop()
+        alert("Sélectionnez au moins un modèle", "warn")
+        st.stop()
 
     if st.button("🚀 Lancer l'entraînement K-Fold", key="run_cls"):
-        from sklearn.model_selection import StratifiedKFold, cross_val_predict
+
+        from sklearn.model_selection import StratifiedKFold
         from sklearn.preprocessing import LabelEncoder, StandardScaler
-        from sklearn.metrics import (confusion_matrix, accuracy_score,
-                                     precision_score, recall_score, f1_score,
-                                     roc_auc_score, classification_report)
+        from sklearn.metrics import (
+            confusion_matrix,
+            accuracy_score,
+            precision_score,
+            recall_score,
+            f1_score,
+            roc_auc_score,
+            classification_report
+        )
+
         from sklearn.tree import DecisionTreeClassifier
         from sklearn.ensemble import RandomForestClassifier
         from sklearn.neighbors import KNeighborsClassifier
@@ -1360,156 +1438,410 @@ elif PAGE == "classification":
         from sklearn.svm import SVC
         from sklearn.naive_bayes import GaussianNB
 
-        # Prepare
+        # ── Prepare data ──────────────────────────────────────────────────────
         X_cls = df_cls[feat_cols].values
         y_raw = df_cls[target_col].values
-        le = LabelEncoder(); y_cls = le.fit_transform(y_raw)
-        class_names = le.classes_.astype(str)
-        sc = StandardScaler(); X_cls = sc.fit_transform(X_cls)
 
-        skf = StratifiedKFold(n_splits=n_folds, shuffle=True, random_state=42)
+        le = LabelEncoder()
+        y_cls = le.fit_transform(y_raw)
+
+        class_names = le.classes_.astype(str)
+
+        sc = StandardScaler()
+        X_cls = sc.fit_transform(X_cls)
+
+        skf = StratifiedKFold(
+            n_splits=n_folds,
+            shuffle=True,
+            random_state=42
+        )
+
         avg_mode = "binary" if is_binary else "weighted"
 
+        # ── Model factory ─────────────────────────────────────────────────────
         def build_model(key):
-            m = {"dt": DecisionTreeClassifier(max_depth=dt_depth, random_state=42),
-                 "rf": RandomForestClassifier(n_estimators=rf_trees, random_state=42, n_jobs=-1),
-                 "svm": SVC(C=svm_c, kernel="rbf", probability=True, random_state=42),
-                 "knn": KNeighborsClassifier(n_neighbors=knn_k, n_jobs=-1),
-                 "nb":  GaussianNB(),
-                 "lr":  LogisticRegression(max_iter=1000, random_state=42),
-                 "xgb": None, "lgbm": None, "cat": None}
+
+            models = {
+                "dt": DecisionTreeClassifier(
+                    max_depth=dt_depth,
+                    random_state=42
+                ),
+
+                "rf": RandomForestClassifier(
+                    n_estimators=rf_trees,
+                    random_state=42,
+                    n_jobs=-1
+                ),
+
+                "svm": SVC(
+                    C=svm_c,
+                    kernel="rbf",
+                    probability=True,
+                    random_state=42
+                ),
+
+                "knn": KNeighborsClassifier(
+                    n_neighbors=knn_k,
+                    n_jobs=-1
+                ),
+
+                "nb": GaussianNB(),
+
+                "lr": LogisticRegression(
+                    max_iter=1000,
+                    random_state=42
+                ),
+            }
+
             if key == "xgb":
                 try:
                     from xgboost import XGBClassifier
-                    return XGBClassifier(learning_rate=xgb_lr, n_estimators=100, objective="binary:logistic" if is_binary else "multi:softprob",
-                                        random_state=42, eval_metric="logloss", verbosity=0)
-                except: return DecisionTreeClassifier(max_depth=dt_depth, random_state=42)
+
+                    return XGBClassifier(
+                        learning_rate=xgb_lr,
+                        n_estimators=100,
+                        objective="binary:logistic" if is_binary else "multi:softprob",
+                        random_state=42,
+                        eval_metric="logloss",
+                        verbosity=0
+                    )
+
+                except:
+                    return DecisionTreeClassifier(
+                        max_depth=dt_depth,
+                        random_state=42
+                    )
+
             if key == "lgbm":
                 try:
                     from lightgbm import LGBMClassifier
-                    return LGBMClassifier(learning_rate=xgb_lr, n_estimators=100, random_state=42, verbose=-1)
-                except: return RandomForestClassifier(n_estimators=50, random_state=42)
+
+                    return LGBMClassifier(
+                        learning_rate=xgb_lr,
+                        n_estimators=100,
+                        random_state=42,
+                        verbose=-1
+                    )
+
+                except:
+                    return RandomForestClassifier(
+                        n_estimators=50,
+                        random_state=42
+                    )
+
             if key == "cat":
                 try:
                     from catboost import CatBoostClassifier
-                    return CatBoostClassifier(learning_rate=xgb_lr, iterations=100, random_seed=42, verbose=0)
-                except: return RandomForestClassifier(n_estimators=50, random_state=42)
-            return m[key]
 
+                    return CatBoostClassifier(
+                        learning_rate=xgb_lr,
+                        iterations=100,
+                        random_seed=42,
+                        verbose=0
+                    )
+
+                except:
+                    return RandomForestClassifier(
+                        n_estimators=50,
+                        random_state=42
+                    )
+
+            return models[key]
+
+        # ── Evaluation ────────────────────────────────────────────────────────
         all_results = []
+
         section("Résultats par Modèle")
 
         for nm, key in selected_models:
+
             model = build_model(key)
+
             with st.spinner(f"Entraînement {nm} ({n_folds}-Fold)…"):
-                # Manual K-Fold to avoid nested-parallelism issues and have
-                # full control over predictions (fixes "Expected [0,1] got [0,2]")
-                y_pred_all  = np.zeros(len(y_cls), dtype=int)
-                y_proba_all = np.zeros((len(y_cls), len(class_names)))
-                has_proba   = hasattr(model, "predict_proba")
+
+                y_pred_all = np.zeros(len(y_cls), dtype=int)
+
+                y_proba_all = np.zeros(
+                    (len(y_cls), len(class_names))
+                )
+
+                has_proba = hasattr(model, "predict_proba")
+
                 for train_idx, test_idx in skf.split(X_cls, y_cls):
+
                     Xtr, Xte = X_cls[train_idx], X_cls[test_idx]
-                    ytr       = y_cls[train_idx]
+                    ytr = y_cls[train_idx]
+
                     fold_encoder = LabelEncoder()
+
                     ytr_encoded = fold_encoder.fit_transform(ytr)
+
                     model.fit(Xtr, ytr_encoded)
+
                     pred_encoded = model.predict(Xte)
+
                     y_pred_fold = fold_encoder.inverse_transform(pred_encoded)
 
                     y_pred_all[test_idx] = y_pred_fold
+
                     if has_proba:
+
                         proba = model.predict_proba(Xte)
 
-                        # align probabilities toXG global class indices
-                        fold_classes = fold_encoder.inverse_transform(model.classes_)
+                        fold_classes = fold_encoder.inverse_transform(
+                            model.classes_
+                        )
 
                         for ci, cl in enumerate(fold_classes):
                             y_proba_all[test_idx, cl] = proba[:, ci]
+
             y_pred = y_pred_all
 
-            acc  = accuracy_score(y_cls, y_pred)
-            prec = precision_score(y_cls, y_pred, average=avg_mode, zero_division=0)
-            rec  = recall_score(y_cls, y_pred, average=avg_mode, zero_division=0)
-            f1   = f1_score(y_cls, y_pred, average=avg_mode, zero_division=0)
+            # ── Metrics ───────────────────────────────────────────────────────
+            acc = accuracy_score(y_cls, y_pred)
+
+            prec = precision_score(
+                y_cls,
+                y_pred,
+                average=avg_mode,
+                zero_division=0
+            )
+
+            rec = recall_score(
+                y_cls,
+                y_pred,
+                average=avg_mode,
+                zero_division=0
+            )
+
+            f1 = f1_score(
+                y_cls,
+                y_pred,
+                average=avg_mode,
+                zero_division=0
+            )
+
             try:
+
                 if is_binary:
+
                     if has_proba:
-                        auc = roc_auc_score(y_cls, y_proba_all[:, 1])
+                        auc = roc_auc_score(
+                            y_cls,
+                            y_proba_all[:, 1]
+                        )
                     else:
                         auc = roc_auc_score(y_cls, y_pred)
+
                 else:
+
                     if has_proba:
-                        auc = roc_auc_score(y_cls, y_proba_all, average="weighted", multi_class="ovr")
+                        auc = roc_auc_score(
+                            y_cls,
+                            y_proba_all,
+                            average="weighted",
+                            multi_class="ovr"
+                        )
                     else:
                         auc = float("nan")
-            except: auc = float("nan")
 
-            all_results.append({"Modèle": nm, "Accuracy": round(acc,4),
-                                 "Precision": round(prec,4), "Recall": round(rec,4),
-                                 "F1-Score": round(f1,4), "AUC-ROC": round(auc,4) if not np.isnan(auc) else "N/A"})
+            except:
+                auc = float("nan")
 
-            with st.expander(f"📊 {nm}  —  Acc: {acc:.4f}  |  F1: {f1:.4f}", expanded=len(selected_models)==1):
-                r1,r2,r3,r4 = st.columns(4)
-                r1.metric("Accuracy",  f"{acc:.4f}")
+            all_results.append({
+                "Modèle": nm,
+                "Accuracy": round(acc, 4),
+                "Precision": round(prec, 4),
+                "Recall": round(rec, 4),
+                "F1-Score": round(f1, 4),
+                "AUC-ROC": round(auc, 4) if not np.isnan(auc) else "N/A"
+            })
+
+            # ── Detailed results ──────────────────────────────────────────────
+            with st.expander(
+                f"📊 {nm} — Acc: {acc:.4f} | F1: {f1:.4f}",
+                expanded=len(selected_models) == 1
+            ):
+
+                r1, r2, r3, r4 = st.columns(4)
+
+                r1.metric("Accuracy", f"{acc:.4f}")
                 r2.metric("Precision", f"{prec:.4f}")
-                r3.metric("Recall",    f"{rec:.4f}")
-                r4.metric("F1-Score",  f"{f1:.4f}")
+                r3.metric("Recall", f"{rec:.4f}")
+                r4.metric("F1-Score", f"{f1:.4f}")
 
-                # Confusion matrix
+                # ── Confusion Matrix ─────────────────────────────────────────
+                st.markdown("### 🔲 Matrice de Confusion")
+
                 cm = confusion_matrix(y_cls, y_pred)
-                fig, ax = _fig(max(6, len(class_names)*1.5), max(4.5, len(class_names)*1.2))
-                im = ax.imshow(cm, cmap="BuPu", aspect="auto")
-                plt.colorbar(im, ax=ax, shrink=0.8)
-                ticks = np.arange(len(class_names))
-                ax.set_xticks(ticks); ax.set_yticks(ticks)
-                ax.set_xticklabels(class_names, rotation=45, ha="right", fontsize=8, color="#7c7a9e")
-                ax.set_yticklabels(class_names, fontsize=8, color="#7c7a9e")
-                thresh = cm.max() / 2
-                for ii in range(cm.shape[0]):
-                    for jj in range(cm.shape[1]):
-                        ax.text(jj, ii, str(cm[ii,jj]), ha="center", va="center", fontsize=9,
-                                fontweight="bold",
-                                color="white" if cm[ii,jj] > thresh else PALETTE[0])
-                _style_ax(ax, f"Matrice de Confusion — {nm}", "Prédit", "Réel")
-                plt.tight_layout(); st.pyplot(fig); plt.close(fig)
 
+                fig, ax = plt.subplots(
+                    figsize=(
+                        max(6, len(class_names) * 1.5),
+                        max(5, len(class_names) * 1.2)
+                    )
+                )
+
+                im = ax.imshow(
+                    cm,
+                    cmap="Purples",
+                    aspect="auto"
+                )
+
+                plt.colorbar(im, ax=ax)
+
+                ticks = np.arange(len(class_names))
+
+                ax.set_xticks(ticks)
+                ax.set_yticks(ticks)
+
+                ax.set_xticklabels(
+                    class_names,
+                    rotation=45,
+                    ha="right",
+                    fontsize=9
+                )
+
+                ax.set_yticklabels(
+                    class_names,
+                    fontsize=9
+                )
+
+                thresh = cm.max() / 2
+
+                for i in range(cm.shape[0]):
+                    for j in range(cm.shape[1]):
+
+                        ax.text(
+                            j,
+                            i,
+                            str(cm[i, j]),
+                            ha="center",
+                            va="center",
+                            fontsize=10,
+                            fontweight="bold",
+                            color="white" if cm[i, j] > thresh else "black"
+                        )
+
+                ax.set_title(
+                    f"Confusion Matrix — {nm}",
+                    fontsize=13,
+                    fontweight="bold"
+                )
+
+                ax.set_xlabel("Predicted Label")
+                ax.set_ylabel("True Label")
+
+                plt.tight_layout()
+
+                st.pyplot(fig)
+
+                plt.close(fig)
+
+                # ── Classification report ───────────────────────────────────
                 with st.expander("📄 Rapport de classification complet"):
-                    rep = classification_report(y_cls, y_pred, target_names=class_names, zero_division=0)
+
+                    rep = classification_report(
+                        y_cls,
+                        y_pred,
+                        target_names=class_names,
+                        zero_division=0
+                    )
+
                     st.code(rep, language="text")
 
-        # ── Résumé comparatif ─────────────────────────────────────────────────
+        # ── Global comparison ─────────────────────────────────────────────────
         if len(all_results) > 1:
+
             section("Tableau Comparatif Global")
+
             res_df = pd.DataFrame(all_results).set_index("Modèle")
+
             num_res = res_df.select_dtypes(include=np.number)
-            st.dataframe(num_res.style.highlight_max(axis=0, color="rgba(108,71,255,0.15)")
-                                      .highlight_min(axis=0, color="rgba(255,107,107,0.12)")
-                                      .format("{:.4f}"),
-                         use_container_width=True)
 
-            # Bar chart
-            metrics_to_plot = ["Accuracy","Precision","Recall","F1-Score"]
-            x = np.arange(len(all_results)); w = 0.2
-            fig, ax = _fig(max(10, len(all_results)*2.5), 5)
-            for i, (met, col) in enumerate(zip(metrics_to_plot, PALETTE)):
+            st.dataframe(
+                num_res.style
+                    .highlight_max(axis=0, color="rgba(108,71,255,0.15)")
+                    .highlight_min(axis=0, color="rgba(255,107,107,0.12)")
+                    .format("{:.4f}"),
+                use_container_width=True
+            )
+
+            # ── Metrics comparison chart ────────────────────────────────────
+            metrics_to_plot = [
+                "Accuracy",
+                "Precision",
+                "Recall",
+                "F1-Score"
+            ]
+
+            x = np.arange(len(all_results))
+            w = 0.2
+
+            fig, ax = _fig(
+                max(10, len(all_results) * 2.5),
+                5
+            )
+
+            for i, (met, col) in enumerate(
+                zip(metrics_to_plot, PALETTE)
+            ):
+
                 vals = [r[met] for r in all_results]
-                bars = ax.bar(x + i*w, vals, w, label=met, color=col, edgecolor="white", linewidth=0.3, alpha=0.9)
+
+                ax.bar(
+                    x + i*w,
+                    vals,
+                    w,
+                    label=met,
+                    color=col,
+                    edgecolor="white",
+                    linewidth=0.3,
+                    alpha=0.9
+                )
+
             ax.set_xticks(x + w*1.5)
-            ax.set_xticklabels([r["Modèle"] for r in all_results], rotation=20, ha="right", fontsize=8)
+
+            ax.set_xticklabels(
+                [r["Modèle"] for r in all_results],
+                rotation=20,
+                ha="right",
+                fontsize=8
+            )
+
             ax.set_ylim(0, 1.12)
-            _style_ax(ax, f"Comparaison des modèles ({n_folds}-Fold Cross-Validation)", "", "Score")
-            ax.legend(fontsize=8, framealpha=0.9, loc="upper right")
-            plt.tight_layout(); st.pyplot(fig); plt.close(fig)
 
-            # Best model highlight
-            best_idx = max(range(len(all_results)), key=lambda i: all_results[i]["F1-Score"])
+            _style_ax(
+                ax,
+                f"Comparaison des modèles ({n_folds}-Fold Cross-Validation)",
+                "",
+                "Score"
+            )
+
+            ax.legend(
+                fontsize=8,
+                framealpha=0.9,
+                loc="upper right"
+            )
+
+            plt.tight_layout()
+
+            st.pyplot(fig)
+
+            plt.close(fig)
+
+            # ── Best model ──────────────────────────────────────────────────
+            best_idx = max(
+                range(len(all_results)),
+                key=lambda i: all_results[i]["F1-Score"]
+            )
+
             best = all_results[best_idx]
-            alert(f"🏆 Meilleur modèle : <b>{best['Modèle']}</b> — F1-Score : <b>{best['F1-Score']:.4f}</b>  |  Accuracy : <b>{best['Accuracy']:.4f}</b>", "ok")
 
-# ══════════════════════════════════════════════════════════════════════════════
-#  FOOTER
-# ══════════════════════════════════════════════════════════════════════════════
-st.markdown("""
-<div class="dn-footer">
-  ⬡ DataMine Studio &nbsp;·&nbsp; Mini-Projet Fouille de Données 1 &nbsp;·&nbsp; Faculté d'Informatique &nbsp;·&nbsp; 2025-2026
-</div>""", unsafe_allow_html=True)
+            alert(
+                f"🏆 Meilleur modèle : "
+                f"<b>{best['Modèle']}</b> — "
+                f"F1-Score : <b>{best['F1-Score']:.4f}</b> | "
+                f"Accuracy : <b>{best['Accuracy']:.4f}</b>",
+                "ok"
+            )
