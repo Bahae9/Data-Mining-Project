@@ -1215,7 +1215,7 @@ elif PAGE == "clustering":
                 "Silhouette":round(sil_safe(X,lkmed),4),"DB":round(db_safe(X,lkmed),4),
                 "Bruit":0,"Inertie":_inertia(X,lkmed)})
             # DBSCAN — use the eps/minpts the user already configured on this page
-            _eps  = float(st.session_state.get("db_eps", 0.5))
+            _eps  = float(st.session_state.get("db_eps", 1.0))
             _mpts = int(st.session_state.get("db_mp",  5))
             ldb = SKDB(eps=_eps, min_samples=_mpts).fit_predict(X)
             nc = len([l for l in set(ldb) if l >= 0])
