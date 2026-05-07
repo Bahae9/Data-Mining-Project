@@ -999,7 +999,7 @@ elif PAGE == "clustering":
         section("Paramètres DBSCAN")
         alert("💡 Utilisez le graphique k-distance pour choisir ε optimal (prendre la valeur au coude)", "info")
         p1,p2,p3 = st.columns(3)
-        with p1: eps_v = st.number_input("ε (epsilon)", 0.01, 20.0, 0.5, 0.05, key="db_eps")
+        with p1: eps_v = st.number_input("ε (epsilon)", 0.01, 20.0, 0.3, 0.05, key="db_eps")
         with p2: minpts = st.slider("MinPts", 2, 30, 5, key="db_mp")
         with p3: db_impl = st.selectbox("Implémentation", ["Sklearn (rapide)","From Scratch (TP3)"], key="db_impl")
 
@@ -1215,7 +1215,7 @@ elif PAGE == "clustering":
                 "Silhouette":round(sil_safe(X,lkmed),4),"DB":round(db_safe(X,lkmed),4),
                 "Bruit":0,"Inertie":_inertia(X,lkmed)})
             # DBSCAN — use the eps/minpts the user already configured on this page
-            _eps  = float(st.session_state.get("db_eps", 1.0))
+            _eps  = float(st.session_state.get("db_eps", 0.5))
             _mpts = int(st.session_state.get("db_mp",  5))
             ldb = SKDB(eps=_eps, min_samples=_mpts).fit_predict(X)
             nc = len([l for l in set(ldb) if l >= 0])
